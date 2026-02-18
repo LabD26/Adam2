@@ -19,11 +19,11 @@ st.title("🔮 亞當理論 - 第二映像圖產生器")
 st.write("輸入股票代號，自動畫出亞當理論的翻轉預測線。")
 
 # 1. 在網頁上建立一個輸入框
-user_input = st.text_input("請輸入台股代號 (或輸入中文名稱，如：台積電、長榮)", "2330.TW")
+user_input = st.text_input("請輸入股票代號或中文名稱 (支援台股如 2330、第一金；美股/ETF 如 AAPL、QQQ、特斯拉)", "2330")
 lookback_days = st.slider("亞當翻轉天數 (Lookback Days)", 10, 60, 20)
 time_frame = st.selectbox("選擇週期 (Time Frame)", ["日線 (Daily)", "週線 (Weekly)", "月線 (Monthly)"])
 
-# Common Taiwan Stocks Dictionary (Hardcoded to avoid scrapping issues)
+# Common Stock Dictionary (Expanded with US Stocks)
 stock_dict = {
     # 科技權值
     '台積電': '2330', '聯發科': '2454', '鴻海': '2317', '廣達': '2382', '台達電': '2308',
@@ -45,34 +45,44 @@ stock_dict = {
     '統一': '1216', '台泥': '1101', '亞泥': '1102', '遠東新': '1402', '豐泰': '9910',
     '儒鴻': '1476', '巨大': '9921', '美利達': '9914',
     
-    # ETF
+    # ETF (Taiwan)
     '0050': '0050', '0056': '0056', '00878': '00878', '00929': '00929', '00919': '00919',
-    '00635U': '00635U', '元大台灣50': '0050', '元大高股息': '0056'
+    '00635U': '00635U', '元大台灣50': '0050', '元大高股息': '0056',
+    
+    # US Stocks / ETFs
+    '蘋果': 'AAPL', '特斯拉': 'TSLA', '輝達': 'NVDA', '微軟': 'MSFT', 
+    '納斯達克': 'QQQ', '標普500': 'SPY'
 }
 
 stock_id = None
 if user_input:
     user_input = user_input.strip()
     
-    # Check if input is in our hardcoded dictionary
+    # 1. 查字典 (Dictionary Lookup)
     if user_input in stock_dict:
-        stock_id = f"{stock_dict[user_input]}.TW"
+        code = stock_dict[user_input]
+        # 智慧判斷：如果代號是數字開頭 (如 2330, 0050)，加上 .TW
+        # 如果是英文開頭 (如 AAPL)，直接用
+        if code[0].isdigit():
+            stock_id = f"{code}.TW"
+        else:
+            stock_id = code
         st.caption(f"已自動轉換為: {stock_id} ({user_input})")
         
-    # Check if numeric input
+    # 2. 純數字 (Pure Numeric) -> 台股，加 .TW
     elif user_input.isdigit():
         stock_id = f"{user_input}.TW"
         st.caption(f"已自動加上後綴: {stock_id}")
         
-    # Check if input looks like an ETF code or has .TW suffix already
-    elif user_input.upper().endswith(".TW") or user_input.upper().endswith(".TWO"):
-        stock_id = user_input
-    elif user_input.isascii() and user_input.isalnum():
-         # Assume it's a code like 00635U
-        stock_id = f"{user_input}.TW"
-        st.caption(f"已自動加上後綴: {stock_id}")
+    # 3. 包含英文字母 (Contains English Letters) -> 美股/ETF，轉大寫，不加 .TW
+    # (注意：這裡假設使用者手動輸入有字母的都是美股，除非在字典裡有定義)
+    elif any(char.isalpha() for char in user_input):
+        stock_id = user_input.upper()
+        # 不加 .TW
+        # 移除這裡的 caption 以保持簡潔，或可選擇加上顯示目前查詢代號
+        
     else:
-        st.error(f"找不到「{user_input}」，請確認名稱正確或直接輸入數字代號。")
+        st.error(f"找不到「{user_input}」，請確認名稱正確或直接輸入股票代號。")
 
 # 當使用者按下按鈕或輸入完畢後執行
 if stock_id:
