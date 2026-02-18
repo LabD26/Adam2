@@ -23,31 +23,56 @@ user_input = st.text_input("請輸入台股代號 (或輸入中文名稱，如�
 lookback_days = st.slider("亞當翻轉天數 (Lookback Days)", 10, 60, 20)
 time_frame = st.selectbox("選擇週期 (Time Frame)", ["日線 (Daily)", "週線 (Weekly)", "月線 (Monthly)"])
 
-import twstock
+# Common Taiwan Stocks Dictionary (Hardcoded to avoid scrapping issues)
+stock_dict = {
+    # 科技權值
+    '台積電': '2330', '聯發科': '2454', '鴻海': '2317', '廣達': '2382', '台達電': '2308',
+    '聯電': '2303', '日月光': '3711', '大立光': '3008', '研華': '2395', '華碩': '2357',
+    '緯創': '3231', '智邦': '2345', '國巨': '2327', '欣興': '3037', '南亞科': '2408',
+    '友達': '2409', '群創': '3481', '力積電': '6770', '世界': '5347', '元太': '8069',
+    '健策': '3653', '嘉澤': '3533', '祥碩': '5269', '信驊': '5274', '世芯': '3661',
+    '創意': '3443', '力旺': '3529', '譜瑞': '4966', '矽力': '6415', '聯詠': '3034', 
+    '瑞昱': '2379',
+    
+    # 金融
+    '富邦金': '2881', '國泰金': '2882', '中信金': '2891', '兆豐金': '2886', '玉山金': '2884',
+    '第一金': '2892', '合庫金': '5880', '華南金': '2880', '台新金': '2887', '元大金': '2885',
+    '永豐金': '2890', '開發金': '2883', '新光金': '2888', '彰銀': '2801', '臺企銀': '2834',
+    
+    # 傳產/航運/塑化
+    '長榮': '2603', '陽明': '2609', '萬海': '2615', '長榮航': '2618', '華航': '2610',
+    '台塑': '1301', '南亞': '1303', '台化': '1326', '臺塑化': '6505', '中鋼': '2002',
+    '統一': '1216', '台泥': '1101', '亞泥': '1102', '遠東新': '1402', '豐泰': '9910',
+    '儒鴻': '1476', '巨大': '9921', '美利達': '9914',
+    
+    # ETF
+    '0050': '0050', '0056': '0056', '00878': '00878', '00929': '00929', '00919': '00919',
+    '00635U': '00635U', '元大台灣50': '0050', '元大高股息': '0056'
+}
 
 stock_id = None
 if user_input:
     user_input = user_input.strip()
     
-    # 先判斷是否為數字或一般代號 (例如 00635U)
-    if user_input.upper().endswith(".TW") or user_input.upper().endswith(".TWO"):
+    # Check if input is in our hardcoded dictionary
+    if user_input in stock_dict:
+        stock_id = f"{stock_dict[user_input]}.TW"
+        st.caption(f"已自動轉換為: {stock_id} ({user_input})")
+        
+    # Check if numeric input
+    elif user_input.isdigit():
+        stock_id = f"{user_input}.TW"
+        st.caption(f"已自動加上後綴: {stock_id}")
+        
+    # Check if input looks like an ETF code or has .TW suffix already
+    elif user_input.upper().endswith(".TW") or user_input.upper().endswith(".TWO"):
         stock_id = user_input
     elif user_input.isascii() and user_input.isalnum():
+         # Assume it's a code like 00635U
         stock_id = f"{user_input}.TW"
         st.caption(f"已自動加上後綴: {stock_id}")
     else:
-        # 嘗試用 twstock 搜尋中文名稱
-        # twstock.codes 是一個 dictionary，key 是代號，value 是 StockCodeInfo (包含 name)
-        found = False
-        for code, info in twstock.codes.items():
-            if info.name == user_input:
-                stock_id = f"{code}.TW"
-                st.caption(f"已自動轉換為: {stock_id} ({user_input})")
-                found = True
-                break
-        
-        if not found:
-            st.error(f"找不到「{user_input}」，請確認名稱正確或直接輸入數字代號。")
+        st.error(f"找不到「{user_input}」，請確認名稱正確或直接輸入數字代號。")
 
 # 當使用者按下按鈕或輸入完畢後執行
 if stock_id:
