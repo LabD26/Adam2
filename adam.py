@@ -59,30 +59,39 @@ if user_input:
     user_input = user_input.strip()
     
     # 1. 查字典 (Dictionary Lookup)
+    # 如果在字典裡，先轉換成代號 (例如 '台積電' -> '2330', '蘋果' -> 'AAPL')
     if user_input in stock_dict:
         code = stock_dict[user_input]
-        # 智慧判斷：如果代號是數字開頭 (如 2330, 0050)，加上 .TW
-        # 如果是英文開頭 (如 AAPL)，直接用
-        if code[0].isdigit():
-            stock_id = f"{code}.TW"
-        else:
-            stock_id = code
-        st.caption(f"已自動轉換為: {stock_id} ({user_input})")
-        
-    # 2. 純數字 (Pure Numeric) -> 台股，加 .TW
-    elif user_input.isdigit():
-        stock_id = f"{user_input}.TW"
-        st.caption(f"已自動加上後綴: {stock_id}")
-        
-    # 3. 包含英文字母 (Contains English Letters) -> 美股/ETF，轉大寫，不加 .TW
-    # (注意：這裡假設使用者手動輸入有字母的都是美股，除非在字典裡有定義)
-    elif any(char.isalpha() for char in user_input):
-        stock_id = user_input.upper()
-        # 不加 .TW
-        # 移除這裡的 caption 以保持簡潔，或可選擇加上顯示目前查詢代號
-        
     else:
-        st.error(f"找不到「{user_input}」，請確認名稱正確或直接輸入股票代號。")
+        code = user_input # 不在字典裡，直接使用輸入值
+        
+    # 2. 智慧判斷 (Smart Logic)
+    # 判斷第一個字元
+    if len(code) > 0:
+        first_char = code[0]
+        
+        # Case A: 數字開頭 -> 視為台股 (Taiwan Stock)
+        if first_char.isdigit():
+            # 檢查是否已經有後綴
+            code_upper = code.upper()
+            if code_upper.endswith(".TW") or code_upper.endswith(".TWO"):
+                stock_id = code_upper # 已經有後綴，直接使用
+            else:
+                stock_id = f"{code}.TW" # 自動加上 .TW
+                
+            if user_input != stock_id:
+                st.caption(f"已自動轉換為: {stock_id}")
+                
+        # Case B: 英文字母開頭 -> 視為美股 (US Stock)
+        elif first_char.isalpha():
+            stock_id = code.upper() # 轉大寫，不加後綴
+            if user_input != stock_id:
+                st.caption(f"已自動轉換為: {stock_id}")
+                
+        # Case C: 其他狀況 (防呆)
+        else:
+            st.error(f"無法辨識「{user_input}」，請輸入正確的股號或名稱。")
+    
 
 # 當使用者按下按鈕或輸入完畢後執行
 if stock_id:
