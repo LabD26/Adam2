@@ -22,6 +22,7 @@ st.write("輸入股票代號，自動畫出亞當理論的翻轉預測線。")
 user_input = st.text_input("請輸入股票代號或中文名稱 (支援台股如 2330、第一金；美股/ETF 如 AAPL、QQQ、特斯拉)", "2330")
 lookback_days = st.slider("亞當翻轉天數 (Lookback Days)", 10, 60, 20)
 time_frame = st.selectbox("選擇週期 (Time Frame)", ["日線 (Daily)", "週線 (Weekly)", "月線 (Monthly)"])
+backtest_date_input = st.date_input("回測基準日 (Backtest Date)", datetime.date.today())
 
 # Common Stock Dictionary (Expanded with US Stocks)
 stock_dict = {
@@ -95,18 +96,18 @@ if user_input:
 
 # 當使用者按下按鈕或輸入完畢後執行
 if stock_id:
-    # 2. 下載資料
+    # 2. 下載資料 (抓到今天為止的完整資料，用來對照)
     end_date = datetime.datetime.now()
     
     # 根據週期設定抓取資料的時間長度和頻率
     if "日線" in time_frame:
-        start_date = end_date - datetime.timedelta(days=300) # 抓約一年
+        start_date = end_date - datetime.timedelta(days=365*2) # 抓多一點確保回測夠用
         interval = "1d"
     elif "週線" in time_frame:
-        start_date = end_date - datetime.timedelta(weeks=150) # 抓約三年
+        start_date = end_date - datetime.timedelta(weeks=150*2)
         interval = "1wk"
     elif "月線" in time_frame:
-        start_date = end_date - datetime.timedelta(days=365*10) # 抓約十年
+        start_date = end_date - datetime.timedelta(days=365*20)
         interval = "1mo"
 
     try:
@@ -115,62 +116,89 @@ if stock_id:
         if df.empty:
             st.error("找不到股票資料，請檢查代號是否正確 (例如台積電是 2330.TW)。")
         else:
-            # 3. 亞當理論運算
-            close_price = df['Close']
-            # 如果是多層索引 (MultiIndex)，簡化它
-            if isinstance(close_price, pd.DataFrame):
-                close_price = close_price.iloc[:, 0]
+            # 處理 MultiIndex (如有)
+            close_price_full = df['Close']
+            if isinstance(close_price_full, pd.DataFrame):
+                close_price_full = close_price_full.iloc[:, 0]
+            
+            # --- 以下是根據回測日期切割資料的邏輯 ---
+            
+            # 將使用者選擇的 date 轉成 datetime (比較好跟 index 比對)
+            # 因為 yfinance 下載的 index 通常是 timestamp
+            backtest_datetime = pd.Timestamp(datetime.datetime.combine(backtest_date_input, datetime.time.max))
+            
+            # 1. 真實走勢 (全部資料) -> 用來畫黑線
+            # close_price_full 已經是這個了
+            
+            # 2. 運算用資料 (只取到回測基準日) -> 用來算亞當
+            calc_data = close_price_full[close_price_full.index <= backtest_datetime]
+            
+            if calc_data.empty or len(calc_data) < lookback_days:
+                st.error("您選擇的回測基準日太早，在此日期之前沒有足夠的歷史資料進行計算。")
+            else:
+                # 3. 亞當理論運算 (全部使用 calc_data)
+                current_price = calc_data.iloc[-1]
+                last_date = calc_data.index[-1] # 這應該就是回測基準日附近的最後交易日
                 
-            current_price = close_price.iloc[-1]
-            last_date = close_price.index[-1]
-            
-            # 計算均線 (MA)
-            ma30 = close_price.rolling(window=30).mean()
-            ma50 = close_price.rolling(window=50).mean()
-            ma100 = close_price.rolling(window=100).mean()
-            
-            # 抓取要翻轉的這段資料
-            recent_data = close_price.iloc[-lookback_days:]
-            
-            # 計算翻轉 (這裡用簡單的 list 運算)
-            projection = []
-            future_dates = []
-            
-            # 產生未來日期
-            for i in range(1, lookback_days + 1):
-                # 亞當核心公式：未來 = 現在 + (現在 - 過去)
-                past_price = recent_data.iloc[-i] # 倒著取
-                proj_price = current_price + (current_price - past_price)
+                # 計算均線 (MA) - 用全部資料計算比較有連貫性，但畫圖時可以全畫
+                ma30 = close_price_full.rolling(window=30).mean()
+                ma50 = close_price_full.rolling(window=50).mean()
+                ma100 = close_price_full.rolling(window=100).mean()
                 
-                projection.append(proj_price)
-                future_dates.append(last_date + datetime.timedelta(days=i))
-            
-            # 4. 畫圖 (Matplotlib)
-            fig, ax = plt.subplots(figsize=(10, 5))
-            
-            # 畫歷史股價 (黑色)
-            plot_range = 90 # 設定畫圖範圍稍微長一點，讓均線更清楚
-            ax.plot(close_price.index[-plot_range:], close_price.iloc[-plot_range:], label='歷史走勢', color='black', linewidth=1.5)
-            
-            # 畫均線
-            ax.plot(close_price.index[-plot_range:], ma30.iloc[-plot_range:], label='30MA', color='orange', alpha=0.8, linewidth=1)
-            ax.plot(close_price.index[-plot_range:], ma50.iloc[-plot_range:], label='50MA', color='green', alpha=0.8, linewidth=1)
-            ax.plot(close_price.index[-plot_range:], ma100.iloc[-plot_range:], label='100MA', color='purple', alpha=0.8, linewidth=1)
-            
-            # 畫亞當預測線 (紅色虛線)
-            ax.plot(future_dates, projection, label='亞當預測 (第二映像)', color='red', linestyle='--', linewidth=1.5)
-            
-            # 標示今天的十字線
-            ax.axvline(x=last_date, color='gray', linestyle=':', alpha=0.5)
-            
-            ax.legend()
-            ax.set_title(f"{stock_id} 亞當理論翻轉圖")
-            ax.grid(True, alpha=0.3)
-            
-            # 5. 把圖秀在 Streamlit 網頁上
-            st.pyplot(fig)
-            
-            st.success(f"目前價格: {current_price:.2f}")
+                # 抓取要翻轉的這段資料 (從 calc_data 裡抓)
+                recent_data = calc_data.iloc[-lookback_days:]
+                
+                # 計算翻轉
+                projection = []
+                future_dates = []
+                
+                # 產生未來日期
+                for i in range(1, lookback_days + 1):
+                    # 亞當核心公式：未來 = 現在 + (現在 - 過去)
+                    past_price = recent_data.iloc[-i] # 倒著取
+                    proj_price = current_price + (current_price - past_price)
+                    
+                    projection.append(proj_price)
+                    # 這裡的 last_date 是回測基準日，所以預測線會從回測日往未來跑
+                    future_dates.append(last_date + datetime.timedelta(days=i))
+                
+                # 4. 畫圖 (Matplotlib)
+                fig, ax = plt.subplots(figsize=(10, 5))
+                
+                # 畫歷史股價 (黑色) - 畫出完整走勢 (包含回測日之後的真實狀況)
+                # 設定畫圖範圍：顯示回測日前後一段時間
+                # 我們希望看到回測點之前 lookback_days * 1.5 天，以及之後的所有天
+                # 先找出回測點在 full data 中的位置
+                
+                # 這裡簡單抓一個範圍，例如回測日前 60 天開始畫
+                # 找出 calc_data 在 full data 的長度
+                split_idx = len(calc_data)
+                start_plot_idx = max(0, split_idx - 60)
+                
+                plot_data = close_price_full.iloc[start_plot_idx:]
+                
+                ax.plot(plot_data.index, plot_data, label='真實走勢 (Real)', color='black', linewidth=1.5)
+                
+                # 畫均線
+                ax.plot(plot_data.index, ma30.iloc[start_plot_idx:], label='30MA', color='orange', alpha=0.8, linewidth=1)
+                ax.plot(plot_data.index, ma50.iloc[start_plot_idx:], label='50MA', color='green', alpha=0.8, linewidth=1)
+                ax.plot(plot_data.index, ma100.iloc[start_plot_idx:], label='100MA', color='purple', alpha=0.8, linewidth=1)
+                
+                # 畫亞當預測線 (紅色虛線)
+                ax.plot(future_dates, projection, label='亞當預測 (Prediction)', color='red', linestyle='--', linewidth=1.5)
+                
+                # 標示回測基準日 (藍色點斷線)
+                ax.axvline(x=last_date, color='blue', linestyle='-.', alpha=0.8, label='回測起點 (Start)')
+                
+                ax.legend()
+                ax.set_title(f"{stock_id} 亞當理論翻轉 (基準日: {last_date.date()})")
+                ax.grid(True, alpha=0.3)
+                
+                # 5. 把圖秀在 Streamlit 網頁上
+                st.pyplot(fig)
+                
+                st.info(f"回測基準價 ({last_date.date()}): {current_price:.2f}")
+                st.success(f"目前最新價 ({close_price_full.index[-1].date()}): {close_price_full.iloc[-1]:.2f}")
 
     except Exception as e:
         st.error(f"發生錯誤: {e}")
