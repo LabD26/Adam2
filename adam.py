@@ -19,10 +19,12 @@ st.title("🔮 亞當理論 - 第二映像圖產生器")
 st.write("輸入股票代號，自動畫出亞當理論的翻轉預測線。")
 
 # 1. 在網頁上建立一個輸入框
-user_input = st.text_input("請輸入股票代號或中文名稱 (支援台股如 2330、第一金；美股/ETF 如 AAPL、QQQ、特斯拉)", "2330")
-lookback_days = st.slider("亞當翻轉天數 (Lookback Days)", 10, 60, 20)
-time_frame = st.selectbox("選擇週期 (Time Frame)", ["日線 (Daily)", "週線 (Weekly)", "月線 (Monthly)"])
-backtest_date_input = st.date_input("回測基準日 (Backtest Date)", datetime.date.today())
+with st.form(key='query_form'):
+    user_input = st.text_input("請輸入股票代號或中文名稱 (支援台股如 2330、第一金；美股/ETF 如 AAPL、QQQ、特斯拉)", "2330")
+    lookback_days = st.slider("亞當翻轉天數 (Lookback Days)", 10, 60, 20)
+    time_frame = st.selectbox("選擇週期 (Time Frame)", ["日線 (Daily)", "週線 (Weekly)", "月線 (Monthly)"])
+    backtest_date_input = st.date_input("回測基準日 (Backtest Date) - optional", datetime.date.today())
+    submit_button = st.form_submit_button(label='查詢')
 
 # Common Stock Dictionary (Expanded with US Stocks)
 stock_dict = {
@@ -52,7 +54,9 @@ stock_dict = {
     
     # US Stocks / ETFs
     '蘋果': 'AAPL', '特斯拉': 'TSLA', '輝達': 'NVDA', '微軟': 'MSFT', 
-    '納斯達克': 'QQQ', '標普500': 'SPY'
+    '納斯達克': 'QQQ', '標普500': 'SPY',
+    '波克夏': 'BRK-B', 'BRK': 'BRK-B', 'BRK.B': 'BRK-B', 'BRK/B': 'BRK-B',
+    'Google': 'GOOGL', 'Alphabet': 'GOOGL'
 }
 
 stock_id = None
@@ -85,7 +89,7 @@ if user_input:
                 
         # Case B: 英文字母開頭 -> 視為美股 (US Stock)
         elif first_char.isalpha():
-            stock_id = code.upper() # 轉大寫，不加後綴
+            stock_id = code.upper().replace('.', '-').replace('/', '-') # 自動將 . 或 / 替換為 - (Yahoo Finance 格式)
             if user_input != stock_id:
                 st.caption(f"已自動轉換為: {stock_id}")
                 
