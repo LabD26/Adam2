@@ -59,39 +59,35 @@ stock_dict = {
     'Google': 'GOOGL', 'Alphabet': 'GOOGL'
 }
 
-stock_id = None
+candidates = []
+
 if user_input:
     user_input = user_input.strip()
     
     # 1. 查字典 (Dictionary Lookup)
-    # 如果在字典裡，先轉換成代號 (例如 '台積電' -> '2330', '蘋果' -> 'AAPL')
     if user_input in stock_dict:
         code = stock_dict[user_input]
     else:
-        code = user_input # 不在字典裡，直接使用輸入值
+        code = user_input
         
     # 2. 智慧判斷 (Smart Logic)
-    # 判斷第一個字元
     if len(code) > 0:
         first_char = code[0]
         
         # Case A: 數字開頭 -> 視為台股 (Taiwan Stock)
         if first_char.isdigit():
-            # 檢查是否已經有後綴
             code_upper = code.upper()
-            if code_upper.endswith(".TW") or code_upper.endswith(".TWO"):
-                stock_id = code_upper # 已經有後綴，直接使用
+            # 檢查是否已經有後綴
+            if code_upper.endswith(".TW") or code_upper.endswith(".TWO") or code_upper.endswith(".TE"):
+                candidates = [code_upper]
             else:
-                stock_id = f"{code}.TW" # 自動加上 .TW
-                
-            if user_input != stock_id:
-                st.caption(f"已自動轉換為: {stock_id}")
+                # Fallback 機制: 優先嘗試上市 (.TW) -> 上櫃 (.TWO) -> 興櫃 (.TE)
+                candidates = [f"{code}.TW", f"{code}.TWO", f"{code}.TE"]
                 
         # Case B: 英文字母開頭 -> 視為美股 (US Stock)
         elif first_char.isalpha():
-            stock_id = code.upper().replace('.', '-').replace('/', '-') # 自動將 . 或 / 替換為 - (Yahoo Finance 格式)
-            if user_input != stock_id:
-                st.caption(f"已自動轉換為: {stock_id}")
+            # 自動將 . 或 / 替換為 - (Yahoo Finance 格式)
+            candidates = [code.upper().replace('.', '-').replace('/', '-')]
                 
         # Case C: 其他狀況 (防呆)
         else:
@@ -99,7 +95,7 @@ if user_input:
     
 
 # 當使用者按下按鈕或輸入完畢後執行
-if stock_id:
+if candidates:
     # 2. 下載資料 (抓到今天為止的完整資料，用來對照)
     end_date = datetime.datetime.now()
     
@@ -115,11 +111,30 @@ if stock_id:
         interval = "1mo"
 
     try:
-        df = yf.download(stock_id, start=start_date, end=end_date, interval=interval)
-        
+        df = pd.DataFrame()
+        stock_id = None # 清空 stock_id，等待確認找到的代碼
+
+        # 嘗試下載資料 (Fallback Loop)
+        for cand in candidates:
+            try:
+                # 嘗試下載
+                temp_df = yf.download(cand, start=start_date, end=end_date, interval=interval, progress=False)
+                
+                # 檢查是否為空
+                if not temp_df.empty:
+                    df = temp_df
+                    stock_id = cand # 成功抓到，設定 stock_id
+                    break # 跳出迴圈
+            except Exception:
+                continue # 發生錯誤則嘗試下一個
+
         if df.empty:
-            st.error("找不到股票資料，請檢查代號是否正確 (例如台積電是 2330.TW)。")
+            st.error(f"找不到股票資料 ({user_input})，請檢查代號是否正確。")
         else:
+            # 成功後顯示最終使用的代碼
+            if user_input.upper() != stock_id:
+                st.caption(f"已自動轉換為: {stock_id}")
+
             # 處理 MultiIndex (如有)
             close_price_full = df['Close']
             if isinstance(close_price_full, pd.DataFrame):
